@@ -3,6 +3,8 @@ package config
 import (
 	"context"
 	"errors"
+
+	"os"
 	"sync"
 
 	"github.com/google/generative-ai-go/genai"
@@ -17,14 +19,10 @@ var (
 
 func InitGemini() error {
 	geminiOnce.Do(func() {
-		// apiKey := os.Getenv("GEMINI_API_KEY")
-		// if apiKey == "" {
-		// 	geminiErr = errors.New("GEMINI_API_KEY environment variable is not set")
-		// 	return
-		// }
+		GEMINI_API_KEY := os.Getenv("GEMINI_API_KEY")
 
 		ctx := context.Background()
-		client, err := genai.NewClient(ctx, option.WithAPIKey("AIzaSyAIFYLl-0rfX89tignMqQLNR-SccQnD31Q"))
+		client, err := genai.NewClient(ctx, option.WithAPIKey(GEMINI_API_KEY))
 		if err != nil {
 			geminiErr = err
 			return
