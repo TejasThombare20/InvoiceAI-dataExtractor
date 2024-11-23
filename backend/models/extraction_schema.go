@@ -6,6 +6,17 @@ type ExtractedData struct {
 	Customer CustomerData  `json:"customer"`
 }
 
+type ExtractedDataCollection struct {
+	Invoices      []ExtractedData `json:"invoices"`
+	MissingFields string          `json:"missingFields,omitempty"`
+}
+
+// type ExtractedData struct {
+// 	Invoice  InvoiceData   `json:"invoice"`
+// 	Products []ProductData `json:"products"`
+// 	Customer CustomerData  `json:"customer"`
+// }
+
 type InvoiceData struct {
 	SerialNumber string  `json:"serialNumber"`
 	Date         string  `json:"date"`

@@ -30,5 +30,6 @@ func SetupRoutes(routes *gin.Engine) {
 	routes.PUT("/customer/:id", customerController.UpdateCustomer)
 
 	routes.GET("/invoices", invoiceController.GetAllInvoices)
+	routes.PUT("/invoice/:id", invoiceController.UpdateInvoice)
 
 }

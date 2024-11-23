@@ -27,9 +27,10 @@ func main() {
 	// Create Gin router
 	router := gin.Default()
 
-	router.Use(gin.Logger())
+	// router.Use(gin.Logger())
 
 	// Setup CORS
+	router.MaxMultipartMemory = 8 << 20
 	router.Use(cors.Default())
 
 	// Initialize routes

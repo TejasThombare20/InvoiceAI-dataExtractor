@@ -7,23 +7,14 @@ import (
 )
 
 type Invoice struct {
-	ID            primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	SerialNumber  string             `bson:"serialNumber" json:"serialNumber"`
-	TotalAmount   float64            `bson:"totalAmount" json:"totalAmount"`
-	Date          time.Time          `bson:"date" json:"date"`
-	CreatedAt     time.Time          `bson:"createdAt" json:"createdAt"`
-	ExtractedFrom string             `bson:"extracted_from,omitempty"`
+	ID            primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	SerialNumber  *string            `bson:"serialNumber,omitempty" json:"serialNumber,omitempty"`
+	TotalAmount   *float64           `bson:"totalAmount,omitempty" json:"totalAmount,omitempty"`
+	Date          *time.Time         `bson:"date,omitempty" json:"date,omitempty"`
+	CreatedAt     time.Time          `bson:"createdAt,omitempty" json:"createdAt,omitempty"`
+	ExtractedFrom *string            `bson:"extracted_from,omitempty" json:"extracted_from,omitempty"`
 }
 
-//	type Product struct {
-//		ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-//		Name         string             `bson:"name,omitempty" json:"name,omitempty"`
-//		Quantity     int                `bson:"quantity,omitempty" json:"quantity,omitempty"`
-//		UnitPrice    float64            `bson:"unitPrice,omitempty" json:"unitPrice,omitempty"`
-//		Tax          float64            `bson:"tax,omitempty" json:"tax,omitempty"`
-//		PriceWithTax float64            `bson:"priceWithTax,omitempty" json:"priceWithTax,omitempty"`
-//		InvoiceID    primitive.ObjectID `bson:"invoice_id,omitempty"`
-//	}
 type Product struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	Name         string             `bson:"name,omitempty" json:"name,omitempty"`
@@ -33,14 +24,6 @@ type Product struct {
 	PriceWithTax *float64           `bson:"priceWithTax,omitempty" json:"priceWithTax,omitempty"`
 	InvoiceID    primitive.ObjectID `bson:"invoice_id,omitempty" json:"invoice_id,omitempty"`
 }
-
-// type Customer struct {
-// 	ID                  primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-// 	Name                string             `bson:"name" json:"name"`
-// 	PhoneNumber         string             `bson:"phoneNumber" json:"phoneNumber"`
-// 	TotalPurchaseAmount float64            `bson:"totalPurchaseAmount" json:"totalPurchaseAmount"`
-// 	InvoiceID           primitive.ObjectID `bson:"invoice_id"`
-// }
 
 type Customer struct {
 	ID                  primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
@@ -98,6 +81,26 @@ func (c *Customer) ToUpdateMapCustomer() map[string]interface{} {
 	}
 	if !c.InvoiceID.IsZero() {
 		updates["invoice_id"] = c.InvoiceID
+	}
+
+	return updates
+}
+
+func (i *Invoice) ToUpdateMapInvoice() map[string]interface{} {
+	updates := make(map[string]interface{})
+
+	if i.SerialNumber != nil {
+		updates["serialNumber"] = *i.SerialNumber
+	}
+	if i.TotalAmount != nil {
+		updates["totalAmount"] = *i.TotalAmount
+	}
+	if i.Date != nil {
+		updates["date"] = *i.Date
+	}
+
+	if i.ExtractedFrom != nil {
+		updates["extracted_from"] = *i.ExtractedFrom
 	}
 
 	return updates

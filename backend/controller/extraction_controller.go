@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/TejasThombare20/backend/service"
@@ -18,11 +19,15 @@ func NewExtractionController(extractionService *service.ExtractionService) *Extr
 }
 
 func (c *ExtractionController) ExtractData(ctx *gin.Context) {
+
 	file, header, err := ctx.Request.FormFile("file")
+
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error":   "No file provided",
-			"details": err.Error(),
+		fmt.Println("error", err)
+		ctx.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "something went wrong!!",
+			"error":   "file not found",
 		})
 		return
 	}
@@ -30,15 +35,17 @@ func (c *ExtractionController) ExtractData(ctx *gin.Context) {
 
 	extractedData, err := c.extractionService.ExtractDataFromFile(ctx, file, header.Filename)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to extract data",
-			"details": err.Error(),
+		ctx.JSON(http.StatusOK, gin.H{
+			"error":   err.Error(),
+			"success": false,
+			"message": "Failed to extract data",
 		})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"status": "success",
-		"data":   extractedData,
+		"success": true,
+		"message": "data extracted successfully",
+		"data":    extractedData,
 	})
 }

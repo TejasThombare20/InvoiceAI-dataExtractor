@@ -26,15 +26,16 @@ func NewExtractionService() *ExtractionService {
 	return &ExtractionService{}
 }
 
-// func (s *ExtractionService) ExtractDataFromFile(file io.Reader, fileType string) (map[string]interface{}, error) {
-func (s *ExtractionService) ExtractDataFromFile(ctx context.Context, file io.Reader, filename string) (*models.ExtractedData, error) {
-
+func (s *ExtractionService) ExtractDataFromFile(ctx context.Context, file io.Reader, filename string) (*models.ExtractedDataCollection, error) {
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
 		return nil, fmt.Errorf("error reading file: %v", err)
 	}
 
 	fileContent, fileType, err := processFileByType(fileBytes, filename)
+
+	fmt.Println("fileContent: ", fileType)
+
 	if err != nil {
 		return nil, err
 	}
@@ -46,54 +47,74 @@ func (s *ExtractionService) ExtractDataFromFile(ctx context.Context, file io.Rea
 
 	// Call Gemini API
 	model := geminiClient.GenerativeModel("gemini-1.5-flash")
-
 	model.ResponseMIMEType = "application/json"
 
+	// Updated schema to handle multiple invoices
 	model.ResponseSchema = &genai.Schema{
 		Type: genai.TypeObject,
 		Properties: map[string]*genai.Schema{
-			"invoice": {
-				Type: genai.TypeObject,
-				Properties: map[string]*genai.Schema{
-					"serialNumber": {Type: genai.TypeString},
-					"date":         {Type: genai.TypeString},
-					"totalAmount":  {Type: genai.TypeNumber},
-				},
-				Required: []string{"serialNumber", "date", "totalAmount"},
-			},
-			"products": {
+			"invoices": {
 				Type: genai.TypeArray,
 				Items: &genai.Schema{
 					Type: genai.TypeObject,
 					Properties: map[string]*genai.Schema{
-						"name":         {Type: genai.TypeString},
-						"quantity":     {Type: genai.TypeInteger},
-						"unitPrice":    {Type: genai.TypeNumber},
-						"tax":          {Type: genai.TypeNumber},
-						"priceWithTax": {Type: genai.TypeNumber},
+						"invoice": {
+							Type: genai.TypeObject,
+							Properties: map[string]*genai.Schema{
+								"serialNumber": {Type: genai.TypeString},
+								"date":         {Type: genai.TypeString},
+								"totalAmount":  {Type: genai.TypeNumber},
+							},
+							Required: []string{"serialNumber", "date", "totalAmount"},
+						},
+						"products": {
+							Type: genai.TypeArray,
+							Items: &genai.Schema{
+								Type: genai.TypeObject,
+								Properties: map[string]*genai.Schema{
+									"name":         {Type: genai.TypeString},
+									"quantity":     {Type: genai.TypeInteger},
+									"unitPrice":    {Type: genai.TypeNumber},
+									"tax":          {Type: genai.TypeNumber},
+									"priceWithTax": {Type: genai.TypeNumber},
+								},
+								Required: []string{"name", "quantity", "unitPrice", "tax", "priceWithTax"},
+							},
+						},
+						"customer": {
+							Type: genai.TypeObject,
+							Properties: map[string]*genai.Schema{
+								"name":                {Type: genai.TypeString},
+								"phoneNumber":         {Type: genai.TypeString},
+								"totalPurchaseAmount": {Type: genai.TypeNumber},
+							},
+							Required: []string{"name", "phoneNumber", "totalPurchaseAmount"},
+						},
 					},
-					Required: []string{"name", "quantity", "unitPrice", "tax", "priceWithTax"},
+					Required: []string{"invoice", "products", "customer"},
 				},
 			},
-			"customer": {
-				Type: genai.TypeObject,
-				Properties: map[string]*genai.Schema{
-					"name":                {Type: genai.TypeString},
-					"phoneNumber":         {Type: genai.TypeString},
-					"totalPurchaseAmount": {Type: genai.TypeNumber},
-				},
-				Required: []string{"name", "phoneNumber", "totalPurchaseAmount"},
-			},
+			"missingFields": {Type: genai.TypeString},
 		},
-		Required: []string{"invoice", "products", "customer"},
+		Required: []string{"invoices"},
 	}
 
 	prompt := createPromptForFileType(fileType, fileContent)
-
 	var resp *genai.GenerateContentResponse
+
 	if fileType == "image" {
+		fileExt := strings.TrimPrefix(strings.ToLower(filepath.Ext(filename)), ".")
+		prompt := createPromptForFileType("image", "")
+
+		// Get the appropriate MIME type for the image
+		mimeType := getImageMIMEType(filename)
+
+		// Validate if the image type is supported
+		if mimeType == "application/octet-stream" {
+			return nil, fmt.Errorf("unsupported image type for file: %s", filename)
+		}
 		imgParts := []genai.Part{
-			genai.ImageData("image/jpeg", []byte(fileContent)),
+			genai.ImageData(fileExt, fileBytes),
 			genai.Text(prompt),
 		}
 		resp, err = model.GenerateContent(ctx, imgParts...)
@@ -109,33 +130,37 @@ func (s *ExtractionService) ExtractDataFromFile(ctx context.Context, file io.Rea
 		return nil, fmt.Errorf("no response from model")
 	}
 
-	var extractedData models.ExtractedData
+	var extractedDataCollection models.ExtractedDataCollection
 	for _, part := range resp.Candidates[0].Content.Parts {
 		if txt, ok := part.(genai.Text); ok {
-			if err := json.Unmarshal([]byte(txt), &extractedData); err != nil {
+			if err := json.Unmarshal([]byte(txt), &extractedDataCollection); err != nil {
 				return nil, fmt.Errorf("error parsing response: %v", err)
 			}
 			break
 		}
 	}
 
-	// Validate the extracted data
-	if err := repository.ValidateExtractedData(&extractedData); err != nil {
-		// Log the validation error
-		log.Printf("Validation error for file %s: %v", filename, err)
-
-		// You can choose to return an error or handle it differently based on your requirements
-		return nil, fmt.Errorf("validation failed: %v", err)
+	if extractedDataCollection.MissingFields != "" {
+		log.Printf("Missing fields detected in file %s: %s", filename, extractedDataCollection.MissingFields)
 	}
 
-	// Save the extracted data to the database
+	// Validate each extracted data entry
+	// for i, data := range extractedDataCollection.Invoices {
+	// 	if err := repository.ValidateExtractedData(&data); err != nil {
+	// 		log.Printf("Validation error for invoice %d in file %s: %v", i+1, filename, err)
+	// 		return nil, fmt.Errorf("validation failed for invoice %d: %v", i+1, err)
+	// 	}
+	// }
+
+	// Save all extracted data to the database
 	extractionRepo := repository.NewExtractionRepository()
-	if err := extractionRepo.SaveExtractedData(ctx, &extractedData, filename); err != nil {
-		return nil, fmt.Errorf("error saving extracted data: %v", err)
+	for i, data := range extractedDataCollection.Invoices {
+		if err := extractionRepo.SaveExtractedData(ctx, &data, fmt.Sprintf("%s_invoice_%d", filename, i+1)); err != nil {
+			return nil, fmt.Errorf("error saving extracted data for invoice %d: %v", i+1, err)
+		}
 	}
 
-	return &extractedData, nil
-
+	return &extractedDataCollection, nil
 }
 
 func processFileByType(fileBytes []byte, filename string) (string, string, error) {
@@ -193,17 +218,28 @@ func extractExcelText(fileBytes []byte) (string, error) {
 }
 
 func createPromptForFileType(fileType string, content string) string {
-	return fmt.Sprintf(`Extract invoice, product, and customer information from this %s.
-    Focus on finding:
+	return fmt.Sprintf(`Extract all invoice, product, and customer information from this %s.
+    For each invoice found, extract:
     - Invoice: serial number, date, and total amount
     - Products: name, quantity, unit price, tax and priceWithTax
     - Customer: name, phone number and totalPurchaseAmount
     
-    Respond with a JSON object matching the specified schema.
+    If there are multiple invoices, include all of them in the response.
+    
+    IMPORTANT: If any fields are missing or cannot be extracted, please provide a detailed description 
+    of which fields are missing in the "missingFields" field of the response. For example:
+    - If customer phone number is missing: "Customer phone number not found in the document"
+    - If product tax is missing: "Tax information missing for products"
+    - If multiple fields are missing: "Missing fields: customer phone, product tax, invoice date"
+    
+    The response should be a JSON object containing:
+    1. An "invoices" array with all extracted invoice data
+    2. A "missingFields" string describing any missing information
+    
+    For partial data, still include what was found in the invoices array, and note the missing fields separately.
     
     Content: %s`, fileType, content)
 }
-
 func extractPDFText(fileBytes []byte) (string, error) {
 	// Create a temporary reader from bytes
 	reader := bytes.NewReader(fileBytes)
@@ -225,4 +261,16 @@ func extractPDFText(fileBytes []byte) (string, error) {
 	}
 
 	return content.String(), nil
+}
+
+func getImageMIMEType(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	default:
+		return "application/octet-stream"
+	}
 }

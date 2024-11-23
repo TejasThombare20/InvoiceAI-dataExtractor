@@ -2,10 +2,12 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/TejasThombare20/backend/config"
 	"github.com/TejasThombare20/backend/models"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -33,4 +35,27 @@ func (r *InvoiceRepository) FindAll(ctx context.Context) ([]models.Invoice, erro
 	}
 
 	return invoices, nil
+}
+
+func (r *InvoiceRepository) Update(ctx context.Context, id string, updates map[string]interface{}) error {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	update := bson.M{"$set": updates}
+	result, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": objID},
+		update,
+	)
+	if err != nil {
+		return err
+	}
+
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("invoice not found")
+	}
+
+	return nil
 }

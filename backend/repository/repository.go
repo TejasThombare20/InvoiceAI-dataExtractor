@@ -40,8 +40,8 @@ func (r *ExtractionRepository) SaveExtractedData(ctx context.Context, extractedD
 		// Insert Invoice
 		invoice := models.Invoice{
 			ID:           primitive.NewObjectID(),
-			SerialNumber: extractedData.Invoice.SerialNumber,
-			TotalAmount:  extractedData.Invoice.TotalAmount,
+			SerialNumber: &extractedData.Invoice.SerialNumber,
+			TotalAmount:  &extractedData.Invoice.TotalAmount,
 			CreatedAt:    time.Now(),
 		}
 
@@ -51,7 +51,7 @@ func (r *ExtractionRepository) SaveExtractedData(ctx context.Context, extractedD
 			log.Fatalf("Invalid date format: %v", err)
 		}
 
-		invoice.Date = parsedDate
+		invoice.Date = &parsedDate
 		invoiceResult, err := invoiceCollection.InsertOne(sessionContext, invoice)
 		if err != nil {
 			return fmt.Errorf("failed to insert invoice: %v", err)
